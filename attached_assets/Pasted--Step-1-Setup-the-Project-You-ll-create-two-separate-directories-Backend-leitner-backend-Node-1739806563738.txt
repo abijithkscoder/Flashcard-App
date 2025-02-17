@@ -1,0 +1,264 @@
+📌 Step 1: Setup the Project
+You'll create two separate directories:
+
+Backend: leitner-backend (Node.js, Express, MongoDB)
+Frontend: leitner-frontend (React, Tailwind CSS, Axios)
+🔹 Backend Setup (Node.js + Express + MongoDB)
+Open VS Code and run:
+sh
+Copy
+Edit
+mkdir leitner-backend && cd leitner-backend
+npm init -y
+Install required dependencies:
+sh
+Copy
+Edit
+npm install express mongoose cors dotenv
+npm install nodemon --save-dev
+Create the required files and folders:
+sh
+Copy
+Edit
+touch server.js .env
+mkdir models routes controllers
+📌 Step 2: Implement Backend
+1️⃣ Create the MongoDB Model
+Inside models/Flashcard.js:
+
+javascript
+Copy
+Edit
+const mongoose = require("mongoose");
+
+const flashcardSchema = new mongoose.Schema({
+  question: { type: String, required: true },
+  answer: { type: String, required: true },
+  box: { type: Number, default: 1 }, // Leitner system box
+  nextReview: { type: Date, default: Date.now }, // Review date
+});
+
+module.exports = mongoose.model("Flashcard", flashcardSchema);
+2️⃣ Create API Routes
+Inside routes/flashcardRoutes.js:
+
+javascript
+Copy
+Edit
+const express = require("express");
+const { addFlashcard, getFlashcards, updateFlashcard, deleteFlashcard } = require("../controllers/flashcardController");
+
+const router = express.Router();
+
+router.post("/", addFlashcard);
+router.get("/", getFlashcards);
+router.put("/:id", updateFlashcard);
+router.delete("/:id", deleteFlashcard);
+
+module.exports = router;
+3️⃣ Create API Controllers
+Inside controllers/flashcardController.js:
+
+javascript
+Copy
+Edit
+const Flashcard = require("../models/Flashcard");
+
+// Add a new flashcard
+exports.addFlashcard = async (req, res) => {
+  try {
+    const { question, answer } = req.body;
+    const flashcard = new Flashcard({ question, answer });
+    await flashcard.save();
+    res.status(201).json(flashcard);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get all flashcards
+exports.getFlashcards = async (req, res) => {
+  try {
+    const flashcards = await Flashcard.find().sort({ nextReview: 1 });
+    res.json(flashcards);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update flashcard (Leitner logic)
+exports.updateFlashcard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { correct } = req.body;
+    
+    const flashcard = await Flashcard.findById(id);
+    if (!flashcard) return res.status(404).json({ message: "Flashcard not found" });
+
+    // Update Leitner System logic
+    if (correct) {
+      flashcard.box = Math.min(5, flashcard.box + 1); // Move to next box
+    } else {
+      flashcard.box = 1; // Move back to Box 1
+    }
+
+    // Update next review date based on Leitner box
+    const intervals = [1, 2, 5, 10, 30]; // Days for each box
+    flashcard.nextReview = new Date();
+    flashcard.nextReview.setDate(flashcard.nextReview.getDate() + intervals[flashcard.box - 1]);
+
+    await flashcard.save();
+    res.json(flashcard);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Delete a flashcard
+exports.deleteFlashcard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Flashcard.findByIdAndDelete(id);
+    res.json({ message: "Flashcard deleted" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+4️⃣ Setup Express Server
+Inside server.js:
+
+javascript
+Copy
+Edit
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const flashcardRoutes = require("./routes/flashcardRoutes");
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+app.use("/flashcards", flashcardRoutes);
+
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => app.listen(5000, () => console.log("Server running on port 5000")))
+  .catch(error => console.log(error));
+5️⃣ Add Environment Variables
+Inside .env:
+
+ini
+Copy
+Edit
+MONGO_URI=your_mongodb_connection_string
+6️⃣ Run the Backend
+sh
+Copy
+Edit
+npm run dev
+📌 Step 3: Implement Frontend
+1️⃣ Setup React App
+sh
+Copy
+Edit
+npx create-vite leitner-frontend --template react
+cd leitner-frontend
+npm install axios react-router-dom
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+2️⃣ Configure Tailwind
+Inside tailwind.config.js:
+
+javascript
+Copy
+Edit
+module.exports = {
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: { extend: {} },
+  plugins: [],
+};
+Inside src/index.css:
+
+css
+Copy
+Edit
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+3️⃣ Create Flashcard Components
+Inside src/components/Flashcard.js:
+
+javascript
+Copy
+Edit
+import { useState } from "react";
+
+const Flashcard = ({ card, onUpdate }) => {
+  const [showAnswer, setShowAnswer] = useState(false);
+
+  return (
+    <div className="p-4 border rounded shadow">
+      <p>{card.question}</p>
+      {showAnswer && <p className="text-green-600">{card.answer}</p>}
+      <button onClick={() => setShowAnswer(!showAnswer)}>Show Answer</button>
+      <button onClick={() => onUpdate(card._id, true)}>Got it Right</button>
+      <button onClick={() => onUpdate(card._id, false)}>Got it Wrong</button>
+    </div>
+  );
+};
+
+export default Flashcard;
+4️⃣ Fetch Flashcards in App.js
+Inside src/App.js:
+
+javascript
+Copy
+Edit
+import { useState, useEffect } from "react";
+import axios from "axios";
+import Flashcard from "./components/Flashcard";
+
+const App = () => {
+  const [flashcards, setFlashcards] = useState([]);
+
+  useEffect(() => {
+    axios.get("http://localhost:5000/flashcards").then((res) => setFlashcards(res.data));
+  }, []);
+
+  const updateFlashcard = (id, correct) => {
+    axios.put(`http://localhost:5000/flashcards/${id}`, { correct }).then((res) => {
+      setFlashcards((prev) => prev.map((card) => (card._id === id ? res.data : card)));
+    });
+  };
+
+  return (
+    <div className="p-5">
+      <h1 className="text-xl font-bold">Flashcards</h1>
+      {flashcards.map((card) => (
+        <Flashcard key={card._id} card={card} onUpdate={updateFlashcard} />
+      ))}
+    </div>
+  );
+};
+
+export default App;
+📌 Step 4: Run the Full Stack App
+Start Backend:
+sh
+Copy
+Edit
+npm run dev
+Start Frontend:
+sh
+Copy
+Edit
+npm run dev
+This is a complete MERN Flashcard App using the Leitner System. Let me know if you need enhancements! 🚀
+
+
+
+
+
+
+
