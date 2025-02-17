@@ -5,10 +5,11 @@ import { queryClient } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import type { Flashcard } from "@shared/schema";
 
 export function StudyMode() {
   const { toast } = useToast();
-  const { data: flashcards, isLoading } = useQuery({
+  const { data: flashcards = [], isLoading } = useQuery<Flashcard[]>({
     queryKey: ["/api/flashcards"],
   });
 
@@ -31,7 +32,7 @@ export function StudyMode() {
     return <div>Loading...</div>;
   }
 
-  if (!flashcards?.length) {
+  if (!flashcards.length) {
     return (
       <Card className="p-6 text-center">
         <p>No flashcards available. Create some to start studying!</p>
@@ -40,7 +41,7 @@ export function StudyMode() {
   }
 
   const currentCard = flashcards[0];
-  const boxCounts = flashcards.reduce((acc, card) => {
+  const boxCounts = flashcards.reduce((acc: number[], card) => {
     acc[card.box - 1]++;
     return acc;
   }, Array(5).fill(0));
@@ -55,7 +56,7 @@ export function StudyMode() {
           </div>
         ))}
       </div>
-      
+
       <Progress
         value={(boxCounts[4] / flashcards.length) * 100}
         className="w-full"

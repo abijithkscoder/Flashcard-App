@@ -1,4 +1,6 @@
-import { Flashcard, InsertFlashcard } from "@shared/schema";
+import { flashcards, Flashcard, InsertFlashcard } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   getFlashcards(): Promise<Flashcard[]>;
@@ -7,28 +9,20 @@ export interface IStorage {
   deleteFlashcard(id: number): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private flashcards: Map<number, Flashcard>;
-  private currentId: number;
-
-  constructor() {
-    this.flashcards = new Map();
-    this.currentId = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   async getFlashcards(): Promise<Flashcard[]> {
-    return Array.from(this.flashcards.values());
+    return await db.select().from(flashcards);
   }
 
   async createFlashcard(insertFlashcard: InsertFlashcard): Promise<Flashcard> {
-    const id = this.currentId++;
-    const flashcard: Flashcard = {
-      ...insertFlashcard,
-      id,
-      box: 1,
-      nextReview: new Date(),
-    };
-    this.flashcards.set(id, flashcard);
+    const [flashcard] = await db
+      .insert(flashcards)
+      .values({
+        ...insertFlashcard,
+        box: 1,
+        nextReview: new Date(),
+      })
+      .returning();
     return flashcard;
   }
 
@@ -37,20 +31,29 @@ export class MemStorage implements IStorage {
     box: number,
     nextReview: Date
   ): Promise<Flashcard> {
-    const flashcard = this.flashcards.get(id);
+    const [flashcard] = await db
+      .update(flashcards)
+      .set({ box, nextReview })
+      .where(eq(flashcards.id, id))
+      .returning();
+
     if (!flashcard) {
       throw new Error("Flashcard not found");
     }
-    const updatedFlashcard = { ...flashcard, box, nextReview };
-    this.flashcards.set(id, updatedFlashcard);
-    return updatedFlashcard;
+
+    return flashcard;
   }
 
   async deleteFlashcard(id: number): Promise<void> {
-    if (!this.flashcards.delete(id)) {
+    const [flashcard] = await db
+      .delete(flashcards)
+      .where(eq(flashcards.id, id))
+      .returning();
+
+    if (!flashcard) {
       throw new Error("Flashcard not found");
     }
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7,7 +7,7 @@ export const flashcards = pgTable("flashcards", {
   question: text("question").notNull(),
   answer: text("answer").notNull(),
   box: integer("box").notNull().default(1),
-  nextReview: date("next_review").notNull().default(new Date()),
+  nextReview: timestamp("next_review").notNull().defaultNow(),
 });
 
 export const insertFlashcardSchema = createInsertSchema(flashcards)
